@@ -143,7 +143,12 @@ class KegboardManagerApp(app.App):
   def service_devices(self):
     message_posted = False
     for kb in self.active_devices():
-      for message in kb.drain_messages():
+      try:
+        messages = kb.drain_messages()
+      except ValueError as e:
+        self._logger.warning('Skipping malformed message from %s: %s' % (kb, e))
+        continue
+      for message in messages:
         self.handle_message(kb, message)
         message_posted = True
     return message_posted
