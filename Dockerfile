@@ -1,35 +1,40 @@
+# Stage 1: install dependencies and the package into a venv
+FROM python:3.11-alpine AS builder
+
+WORKDIR /app
+RUN pip install --no-cache-dir "pipenv<2024"
+
+COPY Pipfile Pipfile.lock ./
+RUN pipenv requirements > /tmp/requirements.txt
+
+RUN python -m venv /venv && \
+    /venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt
+
+COPY kegbot ./kegbot
+COPY bin ./bin
+COPY setup.py ./
+RUN /venv/bin/pip install --no-cache-dir .
+
+
+# Stage 2: lean runtime image — no pipenv, no curl, no build cache
 FROM python:3.11-alpine
 
-RUN mkdir /app
 WORKDIR /app
 
-ENV SHELL=/bin/sh \
-   PIP_NO_CACHE_DIR=1 \
-   KEGBOT_IN_DOCKER=True \
-   KEGBOT_ENV=debug
+ENV PATH="/venv/bin:$PATH" \
+    KEGBOT_IN_DOCKER=True \
+    KEGBOT_ENV=debug
 
-RUN apk update && \
-    apk add --no-cache \
-      bash \
-      curl && \
-   pip install "pipenv<2024"
+RUN apk add --no-cache bash
 
-ADD Pipfile Pipfile.lock ./
-RUN pipenv install --deploy --system
-
-ADD bin ./bin
-ADD kegbot ./kegbot
-ADD setup.py ./
-RUN python setup.py develop
+COPY --from=builder /venv /venv
+COPY bin ./bin
 
 ARG GIT_SHORT_SHA="unknown"
 ARG VERSION="unknown"
 ARG BUILD_DATE="unknown"
-RUN echo "GIT_SHORT_SHA=${GIT_SHORT_SHA}" > /etc/kegbot-pycore-version
-RUN echo "VERSION=${VERSION}" >> /etc/kegbot-pycore-version
-RUN echo "BUILD_DATE=${BUILD_DATE}" >> /etc/kegbot-pycore-version
+RUN printf "GIT_SHORT_SHA=%s\nVERSION=%s\nBUILD_DATE=%s\n" \
+    "${GIT_SHORT_SHA}" "${VERSION}" "${BUILD_DATE}" \
+    > /etc/kegbot-pycore-version
 
-CMD [ \
-   "python", \
-   "bin/kegbot_core.py" \
-]
+CMD ["python", "bin/kegbot_core.py"]
