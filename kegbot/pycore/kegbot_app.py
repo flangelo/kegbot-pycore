@@ -112,7 +112,7 @@ class KegbotCoreApp(app.App):
     while not self._do_quit:
       try:
         watchdog.join(0.5)
-        if not watchdog.isAlive() and not self._do_quit:
+        if not watchdog.is_alive() and not self._do_quit:
           self._logger.error("Watchdog thread exited, quitting")
           self.Quit()
           return

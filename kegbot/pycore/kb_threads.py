@@ -29,7 +29,7 @@ class WatchdogThread(CoreThread):
       for thr in self._kb_env.GetThreads():
         if not thr.hasStarted():
           continue
-        if not thr.isAlive():
+        if not thr.is_alive():
           self._logger.error('Thread %s died unexpectedly' % thr.getName())
           self.Quit()
       time.sleep(0.5)
