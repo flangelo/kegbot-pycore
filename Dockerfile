@@ -12,7 +12,7 @@ RUN apk update && \
     apk add --no-cache \
       bash \
       curl && \
-   pip install pipenv
+   pip install "pipenv<2024"
 
 ADD Pipfile Pipfile.lock ./
 RUN pipenv install --deploy --system
