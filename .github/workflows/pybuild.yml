@@ -12,21 +12,13 @@ jobs:
   py_build_and_test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: 3.7
+      # Build the Dockerfile's `test` stage and run it. The suite mocks all I/O
+      # (Redis, the Kegbot API, threads), so no services are needed. The image's
+      # default CMD runs `coverage run -m pytest && coverage report --fail-under=80`.
+      - name: Build test image
+        run: docker build --target test -t kegbot/pycore:test .
 
-      - name: Install dependencies
-        run: |
-          pip install pipenv docker-compose
-          pipenv install --deploy --dev
-
-      - name: Run mysql & redis
-        run: |
-          docker-compose -f testdata/test-docker-compose.yml up -d
-
-      - name: pytest
-        run: KEGBOT_DATABASE_URL=mysql://root:changeme@127.0.0.1:3306/kegbot_dev pipenv run pytest
+      - name: Run tests with coverage
+        run: docker run --rm kegbot/pycore:test

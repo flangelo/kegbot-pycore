@@ -46,6 +46,38 @@ ssh kegberry "docker logs kegberry-pycore-1 --tail 50"
 | `kegberry-redis-1` | `redis:7.2` | message bus + task queue |
 | `kegberry-mysql-1` | `mariadb:10.11` | database |
 
+## Running tests
+Tests are plain `unittest.TestCase` classes in `*_test.py` files alongside the
+code, run via pytest. They mock all I/O (Redis, the Kegbot API, threads), so no
+services are required. Config lives in `pytest.ini` and `.coveragerc`.
+
+**Recommended:** build and run the Dockerfile's `test` stage. This runs the
+suite against the same venv/deps as the production image (`python:3.11-alpine`)
+and is exactly what CI (`.github/workflows/pybuild.yml`) does:
+```bash
+docker build --target test -t kegbot/pycore:test .
+docker run --rm kegbot/pycore:test
+```
+The image's default `CMD` runs `coverage run -m pytest && coverage report -m
+--fail-under=80`. Scope it down by overriding the command, e.g.:
+```bash
+docker run --rm kegbot/pycore:test pytest kegbot/pycore/manager_test.py
+```
+
+Quicker iteration (mounts the working tree into a slim image so edits don't
+require a rebuild):
+```bash
+docker run --rm -v "$(pwd)":/app -w /app python:3.11-slim bash -c '
+  pip install -q "pipenv<2024" && pipenv requirements > /tmp/req.txt
+  pip install -q -r /tmp/req.txt pytest coverage && pip install -q -e .
+  coverage run -m pytest && coverage report -m'
+```
+
+**Gotcha (mount workflow only):** mount/run with an explicit absolute path. If
+the working directory drifts to the kegbot-server repo, pytest picks up *its*
+`setup.cfg` addopts (`-p pykeg.test.plugin`), which needs Django and aborts
+collection.
+
 ## Known build constraints
 - **Base image must be `python:3.11-alpine`** — Python 3.12 removed the `imp` module, which the `future` package (and other kegbot deps) still use. 3.11 retains it; 3.11 is supported until 2027.
 - **Pin `pipenv<2024`** — pipenv 2024+ rejects `python_version = "3"` (the spec in Pipfile/Pipfile.lock) as ambiguous in `--deploy` mode. Older pipenv accepts it.

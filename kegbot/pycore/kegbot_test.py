@@ -80,5 +80,11 @@ class KegbotTestCase(unittest.TestCase):
     flows = flow_manager.GetActiveFlows()
     self.assertEqual(1, len(flows))
 
+  def testEnvAccessors(self):
+    self.assertIsNotNone(self.kb.GetWatchdogThread())
+    self.assertIsNotNone(self.kb.GetBackend())
+    self.assertIsNotNone(self.kb.GetAuthenticationManager())
+    self.assertTrue(len(self.kb.GetThreads()) > 0)
+
 if __name__ == '__main__':
   unittest.main()

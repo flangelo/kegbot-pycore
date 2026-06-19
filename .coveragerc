@@ -1,0 +1,10 @@
+[run]
+source = kegbot/pycore
+omit =
+    */*_test.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    raise NotImplementedError
+    if __name__ == .__main__.:
