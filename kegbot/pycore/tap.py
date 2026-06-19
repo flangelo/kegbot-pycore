@@ -15,6 +15,9 @@ class Tap(object):
   def __eq__(self, other):
     return not not other and self.AsTuple() == other.AsTuple()
 
+  def __hash__(self):
+    return hash(self.AsTuple())
+
   def AsTuple(self):
     return self._name, self._ml_per_tick, self._relay_name
 

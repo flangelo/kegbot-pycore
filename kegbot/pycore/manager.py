@@ -91,9 +91,8 @@ class TapManager(Manager):
 
   def _RemoveTap(self, name):
     tap = self._taps.get(name)
-    self.logger.info('Removing tap: %s' % tap)
+    self._logger.info('Removing tap: %s' % tap)
     del self._taps[name]
-    del self._meters[name]
 
   def GetTap(self, name):
     """Returns the registered tap identified by `name`, or None."""
@@ -494,6 +493,11 @@ class TokenRecord(object):
 
   def __hash__(self):
     return hash(self.AsTuple())
+
+  def __eq__(self, other):
+    if not isinstance(other, TokenRecord):
+      return NotImplemented
+    return self.AsTuple() == other.AsTuple()
 
   def __cmp__(self, other):
     if not other:
