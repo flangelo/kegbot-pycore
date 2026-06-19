@@ -14,7 +14,7 @@ Code is written on the **MacBook** (`/Users/frodelangelo/src/kegbot-pycore`), th
 git add <files> && git commit -m "..." && git push
 
 # 2. SSH to Pi, pull, build
-ssh kegberry "cd ~/src/kegbot-pycore && git pull && docker build -t kegbot/pycore:latest ."
+ssh kegberry "cd ~/src/kegbot-pycore && git pull && docker build -t ghcr.io/flangelo/kegbot-pycore:latest ."
 
 # 3. Deploy (docker-compose lives in ~/kegberry on the Pi)
 ssh kegberry "cd ~/kegberry && docker compose up -d kegboard"
@@ -37,8 +37,8 @@ ssh kegberry "docker logs kegberry-pycore-1 --tail 50"
 ## Docker containers (docker-compose project: kegberry)
 | Container | Image | Role |
 |-----------|-------|------|
-| `kegberry-kegboard-1` | `kegbot/pycore:latest` | kegboard serial daemon |
-| `kegberry-pycore-1` | `kegbot/pycore:latest` | pycore event processor |
+| `kegberry-kegboard-1` | `ghcr.io/flangelo/kegbot-pycore:latest` | kegboard serial daemon |
+| `kegberry-pycore-1` | `ghcr.io/flangelo/kegbot-pycore:latest` | pycore event processor |
 | `kegberry-kegnet-listener-1` | `ghcr.io/flangelo/kegbot-server:latest` | kegnet Redis listener |
 | `kegberry-kegbot-1` | `ghcr.io/flangelo/kegbot-server:latest` | Django app |
 | `kegberry-workers-1` | `ghcr.io/flangelo/kegbot-server:latest` | RQ background workers |
@@ -94,5 +94,5 @@ ssh kegberry "docker logs -f kegberry-kegboard-1"
 ssh kegberry "docker ps"
 
 # Rebuild without cache (if packages seem stale)
-ssh kegberry "cd ~/src/kegbot-pycore && docker build --no-cache -t kegbot/pycore:latest ."
+ssh kegberry "cd ~/src/kegbot-pycore && docker build --no-cache -t ghcr.io/flangelo/kegbot-pycore:latest ."
 ```
