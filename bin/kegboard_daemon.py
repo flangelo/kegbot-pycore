@@ -40,6 +40,14 @@ gflags.DEFINE_string('kegboard_device_path', None,
     'Name of the single kegboard device to use.  If unset, the program '
     'will attempt to use all usb serial devices.')
 
+gflags.DEFINE_float('kegboard_watchdog_timeout_seconds', 30.0,
+    'If a connected kegboard sends no message for this many seconds, the '
+    'serial link is presumed wedged and is automatically closed and '
+    'reopened (which toggles DTR and resets the Arduino). A kegboard emits '
+    'temperature readings every ~2s and a HelloMessage every ~10s, so a '
+    'silence this long reliably indicates a stalled link. Set <= 0 to '
+    'disable the watchdog.')
+
 STATUS_CONNECTING = 'connecting'
 STATUS_CONNECTED = 'connected'
 STATUS_NEED_UPDATE = 'need-update'
@@ -76,6 +84,7 @@ class KegboardManagerApp(app.App):
     self.devices_by_path = {}
     self.status_by_path = {}
     self.name_by_path = {}
+    self.last_message_time_by_path = {}
     self.client = kegnet.KegnetClient()
 
   def _Setup(self):
@@ -85,7 +94,9 @@ class KegboardManagerApp(app.App):
     self._logger.info('Main loop starting.')
     while not self._do_quit:
       self.update_devices()
-      if not self.service_devices():
+      message_posted = self.service_devices()
+      self.check_watchdog()
+      if not message_posted:
         time.sleep(0.1)
 
   def update_devices(self):
@@ -116,18 +127,22 @@ class KegboardManagerApp(app.App):
     self.devices_by_path[path] = kb
     self.status_by_path[path] = STATUS_CONNECTING
     self.name_by_path[path] = ''
+    # Seed the watchdog clock so a board that opens but never speaks (e.g. a
+    # board still mid-reset, or a wedged link) is eventually reconnected.
+    self.last_message_time_by_path[path] = time.time()
 
     try:
       kb.ping()
     except IOError:
       self._logger.warning('Error pinging device')
-      remove_device(path)
+      self.remove_device(path)
 
   def remove_device(self, path):
     device = self.devices_by_path.pop(path)
     device.close_quietly()
     del self.status_by_path[path]
     del self.name_by_path[path]
+    self.last_message_time_by_path.pop(path, None)
 
   def get_status(self, path):
     return self.status_by_path.get(path, None)
@@ -142,16 +157,56 @@ class KegboardManagerApp(app.App):
 
   def service_devices(self):
     message_posted = False
-    for kb in self.active_devices():
+    for kb in list(self.active_devices()):
       try:
         messages = kb.drain_messages()
       except ValueError as e:
         self._logger.warning('Skipping malformed message from %s: %s' % (kb, e))
         continue
+      if messages:
+        # Any successfully parsed message means the link is alive; pet the
+        # watchdog. (Persistent corruption yields no messages here, so the
+        # clock keeps ticking and the watchdog will eventually reconnect.)
+        self.last_message_time_by_path[kb.device_path] = time.time()
       for message in messages:
         self.handle_message(kb, message)
         message_posted = True
     return message_posted
+
+  def check_watchdog(self):
+    """Reconnects any connected device that has gone silent too long.
+
+    The kegboard streams unsolicited messages continuously, so a prolonged
+    silence means the serial link has wedged (e.g. after CDC-ACM framing
+    corruption) even though the device file still exists and the fd is still
+    open. update_devices() can't catch this because the device never leaves
+    the glob, so we detect it here and force a reconnect.
+    """
+    timeout = FLAGS.kegboard_watchdog_timeout_seconds
+    if timeout <= 0:
+      return
+    now = time.time()
+    for path in list(self.devices_by_path.keys()):
+      last = self.last_message_time_by_path.get(path)
+      if last is None:
+        continue
+      idle = now - last
+      if idle >= timeout:
+        self._logger.warning(
+            'Watchdog: no data from %s for %.1fs (>= %ss); reconnecting to '
+            'reset the wedged serial link.' % (path, idle, timeout))
+        self.reconnect_device(path)
+
+  def reconnect_device(self, path):
+    """Closes and reopens a device to clear a wedged link.
+
+    Reopening the serial port toggles DTR, which resets the Arduino -- the
+    same recovery a container restart performs. If reopening fails (e.g. the
+    board is briefly absent mid-reset), the device is left untracked and
+    update_devices() will re-add it on a subsequent loop.
+    """
+    self.remove_device(path)
+    self.add_device(path)
 
   def post_message(self, kb, message):
     self._logger.info('Posting message from %s: %s' % (kb, message))
