@@ -5,6 +5,14 @@
 # Don't record teeny drinks
 MIN_VOLUME_TO_RECORD = 10
 
+# Don't record "ghost pours": long flows whose average rate is far below any
+# real pour. With the faucet closed, CO2 breaking out of warming beer (e.g. a
+# kegerator cycling below freezing) can trickle ticks through a meter for half
+# an hour, never idling long enough to end the flow. Real pours average
+# >= 4 mL/s (median ~27); observed ghost flows ran 0.06-1.4 mL/s.
+GHOST_POUR_MIN_DURATION_SECS = 60
+GHOST_POUR_MAX_RATE_ML_PER_SEC = 2.0
+
 # The maximum difference between consecutive meter readings that is considered
 # valid.
 MAX_METER_READING_DELTA = 2200*2

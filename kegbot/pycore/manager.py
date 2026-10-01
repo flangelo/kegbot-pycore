@@ -371,6 +371,14 @@ class DrinkManager(Manager):
     if ticks <= 0:
         self._logger.info('Not recording flow: no ticks.')
         return
+    if (volume_ml is not None
+        and duration >= common_defs.GHOST_POUR_MIN_DURATION_SECS
+        and volume_ml / duration < common_defs.GHOST_POUR_MAX_RATE_ML_PER_SEC):
+        self._logger.warning('Not recording flow: likely ghost pour on %s '
+            '(%i mL over %is = %.2f mL/s, below %.1f mL/s)' % (
+            meter_name, volume_ml, duration, volume_ml / duration,
+            common_defs.GHOST_POUR_MAX_RATE_ML_PER_SEC))
+        return
 
     # Log the drink.  If the username is empty or invalid, the backend will
     # assign it to the default (anonymous) user.  The backend will assign the

@@ -170,14 +170,15 @@ class DrinkManagerTestCase(unittest.TestCase):
     self.backend = FakeBackend()
     self.drink_manager = manager.DrinkManager(self.hub, self.backend)
 
-  def _completed_event(self, ticks=100, volume_ml=50, username='alice'):
+  def _completed_event(self, ticks=100, volume_ml=50, username='alice',
+      duration=5):
     e = kbevent.FlowUpdate()
     e.flow_id = 0x1234
     e.meter_name = 'flow0'
     e.state = kbevent.FlowUpdate.FlowState.COMPLETED
     e.username = username
     e.start_time = datetime.datetime.fromtimestamp(0)
-    e.last_activity_time = datetime.datetime.fromtimestamp(5)
+    e.last_activity_time = datetime.datetime.fromtimestamp(duration)
     e.ticks = ticks
     e.volume_ml = volume_ml
     return e
@@ -211,6 +212,34 @@ class DrinkManagerTestCase(unittest.TestCase):
   def testSkipsZeroTicks(self):
     self.drink_manager.HandleFlowUpdateEvent(self._completed_event(ticks=0))
     self.assertEqual(0, len(self.backend.drinks))
+
+  def testSkipsGhostPour(self):
+    # A real ghost pour: 3076 mL trickled in over 36 minutes (1.4 mL/s).
+    self.drink_manager.HandleFlowUpdateEvent(
+        self._completed_event(ticks=21534, volume_ml=3076, duration=2162))
+    self.assertEqual(0, len(self.backend.drinks))
+
+  def testRecordsSlowRealPour(self):
+    # The slowest real pour on record: 355 mL over 83 s (4.3 mL/s).
+    self.drink_manager.HandleFlowUpdateEvent(
+        self._completed_event(ticks=2485, volume_ml=355, duration=83))
+    self.assertEqual(1, len(self.backend.drinks))
+
+  def testRecordsSlowShortFlow(self):
+    # Below the ghost rate, but too short to be judged by rate.
+    self.drink_manager.HandleFlowUpdateEvent(
+        self._completed_event(volume_ml=50, duration=59))
+    self.assertEqual(1, len(self.backend.drinks))
+
+  def testGhostPourRateBoundary(self):
+    min_secs = common_defs.GHOST_POUR_MIN_DURATION_SECS
+    max_rate = common_defs.GHOST_POUR_MAX_RATE_ML_PER_SEC
+    self.drink_manager.HandleFlowUpdateEvent(self._completed_event(
+        volume_ml=max_rate * min_secs, duration=min_secs))
+    self.assertEqual(1, len(self.backend.drinks))
+    self.drink_manager.HandleFlowUpdateEvent(self._completed_event(
+        volume_ml=max_rate * min_secs - 1, duration=min_secs))
+    self.assertEqual(1, len(self.backend.drinks))
 
   def testRetriesThenDropsOnBackendError(self):
     self.backend.record_drink_exception = backend.BackendException('boom')
