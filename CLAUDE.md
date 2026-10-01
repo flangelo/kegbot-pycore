@@ -43,7 +43,7 @@ ssh kegberry "docker logs kegberry-pycore-1 --tail 50"
 | `kegberry-kegbot-1` | `ghcr.io/flangelo/kegbot-server:latest` | Django app |
 | `kegberry-workers-1` | `ghcr.io/flangelo/kegbot-server:latest` | RQ background workers |
 | `kegberry-nginx-1` | `nginx:alpine` | reverse proxy (port 8000) |
-| `kegberry-redis-1` | `redis:7.2` | message bus + task queue |
+| `kegberry-redis-1` | `redis:7.2-alpine` | message bus + task queue |
 | `kegberry-mysql-1` | `mariadb:10.11` | database |
 
 ## Running tests
