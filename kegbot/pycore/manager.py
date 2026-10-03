@@ -16,6 +16,7 @@ from . import backend
 from . import common_defs
 from . import kbevent
 from . import kegnet
+from . import pour_detect
 from .flow import Flow
 from .flow_meter import FlowMeter
 from .tap import Tap
@@ -351,6 +352,33 @@ class DrinkManager(Manager):
         else:
           self._logger.warning('Max retries exceeded; dropping event.')
 
+  def _GhostPourReason(self, event, ticks, volume_ml, duration):
+    """Returns why a completed flow looks like a ghost pour, or None."""
+    if volume_ml is None or duration < common_defs.GHOST_POUR_MIN_DURATION_SECS:
+      return None
+    if volume_ml / duration < common_defs.GHOST_POUR_MAX_RATE_ML_PER_SEC:
+      return '%i mL over %is = %.2f mL/s, below %.1f mL/s' % (
+          volume_ml, duration, volume_ml / duration,
+          common_defs.GHOST_POUR_MAX_RATE_ML_PER_SEC)
+    if event.onset_ticks is not None:
+      onset_ml = volume_ml * event.onset_ticks / ticks
+      if onset_ml < common_defs.GHOST_POUR_MIN_ONSET_ML:
+        return '%i mL over %is, but only %i mL in the first %is, below %i mL' % (
+            volume_ml, duration, onset_ml,
+            common_defs.GHOST_POUR_ONSET_SECS, common_defs.GHOST_POUR_MIN_ONSET_ML)
+    return None
+
+  def _LogHiddenPours(self, event, ticks, volume_ml):
+    """Reports real pours found inside a dropped ghost flow (log-only)."""
+    if not event.tick_bins or not event.tick_bin_secs:
+      return
+    pours = pour_detect.find_pours(event.tick_bins, event.tick_bin_secs,
+        volume_ml / ticks)
+    for start_secs, end_secs, pour_ml in pours:
+      self._logger.warning('Hidden pour in ghost flow 0x%08x on %s (log only, '
+          'not recorded): %i mL from +%.1fs to +%.1fs' % (
+          event.flow_id, event.meter_name, pour_ml, start_secs, end_secs))
+
   def _PostDrink(self, event):
     ticks = event.ticks
     username = event.username
@@ -373,24 +401,12 @@ class DrinkManager(Manager):
     if ticks <= 0:
         self._logger.info('Not recording flow: no ticks.')
         return
-    if (volume_ml is not None
-        and duration >= common_defs.GHOST_POUR_MIN_DURATION_SECS
-        and volume_ml / duration < common_defs.GHOST_POUR_MAX_RATE_ML_PER_SEC):
-        self._logger.warning('Not recording flow: likely ghost pour on %s '
-            '(%i mL over %is = %.2f mL/s, below %.1f mL/s)' % (
-            meter_name, volume_ml, duration, volume_ml / duration,
-            common_defs.GHOST_POUR_MAX_RATE_ML_PER_SEC))
+    ghost_reason = self._GhostPourReason(event, ticks, volume_ml, duration)
+    if ghost_reason:
+        self._logger.warning('Not recording flow: likely ghost pour on %s (%s)' % (
+            meter_name, ghost_reason))
+        self._LogHiddenPours(event, ticks, volume_ml)
         return
-    if (volume_ml is not None
-        and event.onset_ticks is not None
-        and duration >= common_defs.GHOST_POUR_MIN_DURATION_SECS):
-        onset_ml = volume_ml * event.onset_ticks / ticks
-        if onset_ml < common_defs.GHOST_POUR_MIN_ONSET_ML:
-            self._logger.warning('Not recording flow: likely ghost pour on %s '
-                '(%i mL over %is, but only %i mL in the first %is, below %i mL)' % (
-                meter_name, volume_ml, duration, onset_ml,
-                common_defs.GHOST_POUR_ONSET_SECS, common_defs.GHOST_POUR_MIN_ONSET_ML))
-            return
 
     # Log the drink.  If the username is empty or invalid, the backend will
     # assign it to the default (anonymous) user.  The backend will assign the

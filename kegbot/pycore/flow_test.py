@@ -35,3 +35,25 @@ class FlowTestCase(unittest.TestCase):
     self.flow.AddTicks(1000, when=t(21))
     self.assertEqual(1013, self.flow.GetTicks())
     self.assertEqual(13, self.flow.GetUpdateEvent().onset_ticks)
+
+  def testTickHistoryBins(self):
+    t = datetime.datetime.fromtimestamp
+    self.flow.AddTicks(3, when=t(0.2))
+    self.flow.AddTicks(4, when=t(0.4))
+    self.flow.AddTicks(5, when=t(1.6))
+    self.flow.SetState('completed')
+    e = self.flow.GetUpdateEvent()
+    self.assertEqual([7, 0, 0, 5], e.tick_bins)
+    self.assertEqual(0.5, e.tick_bin_secs)
+
+  def testTickHistoryOnlyOnCompletedEvent(self):
+    self.flow.AddTicks(3, when=datetime.datetime.fromtimestamp(1))
+    self.assertIsNone(self.flow.GetUpdateEvent().tick_bins)
+
+  def testTickHistoryIsCapped(self):
+    t = datetime.datetime.fromtimestamp
+    self.flow.AddTicks(1, when=t(10))
+    self.flow.AddTicks(1, when=t(3 * 60 * 60))
+    self.flow.SetState('completed')
+    self.assertEqual(21, len(self.flow.GetUpdateEvent().tick_bins))
+    self.assertEqual(2, self.flow.GetTicks())

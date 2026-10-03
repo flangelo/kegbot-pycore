@@ -18,6 +18,16 @@ GHOST_POUR_MAX_RATE_ML_PER_SEC = 2.0
 GHOST_POUR_ONSET_SECS = 20
 GHOST_POUR_MIN_ONSET_ML = 40
 
+# A real pour made while a ghost flow is running would be dropped with it.
+# Flows keep a tick history in bins of this width (up to the cap), and
+# pour_detect looks in dropped flows for abrupt steps at least this far above
+# the ghost's baseline. Real pours reach 19-45 mL/s within a second or two;
+# ghosts drift by a few mL/s per second. Log-only for now: hidden pours are
+# reported, not recorded.
+FLOW_HISTORY_BIN_SECS = 0.5
+FLOW_HISTORY_MAX_SECS = 2 * 60 * 60
+HIDDEN_POUR_STEP_ML_PER_SEC = 15
+
 # The maximum difference between consecutive meter readings that is considered
 # valid.
 MAX_METER_READING_DELTA = 2200*2

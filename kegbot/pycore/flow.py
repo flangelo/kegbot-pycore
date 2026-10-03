@@ -20,6 +20,7 @@ class Flow(object):
     self._last_log_time = None
     self._total_ticks = 0
     self._onset_ticks = 0
+    self._tick_bins = []
     self._volume_ml = None
 
   def __str__(self):
@@ -41,6 +42,9 @@ class Flow(object):
     event.ticks = self.GetTicks()
     event.volume_ml = self.GetVolumeMl()
     event.onset_ticks = self._onset_ticks
+    if self._state == kbevent.FlowUpdate.FlowState.COMPLETED:
+      event.tick_bins = self._tick_bins
+      event.tick_bin_secs = common_defs.FLOW_HISTORY_BIN_SECS
 
     return event
 
@@ -52,6 +56,12 @@ class Flow(object):
     onset = datetime.timedelta(seconds=common_defs.GHOST_POUR_ONSET_SECS)
     if when - self._start_time <= onset:
       self._onset_ticks += amount
+    elapsed = max((when - self._start_time).total_seconds(), 0)
+    if elapsed < common_defs.FLOW_HISTORY_MAX_SECS:
+      index = int(elapsed / common_defs.FLOW_HISTORY_BIN_SECS)
+      if index >= len(self._tick_bins):
+        self._tick_bins.extend([0] * (index + 1 - len(self._tick_bins)))
+      self._tick_bins[index] += amount
     if tap is not None:
         self._volume_ml = tap.TicksToMilliliters(self._total_ticks)
 

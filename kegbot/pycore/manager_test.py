@@ -3,6 +3,7 @@
 """Unittest for manager module"""
 
 import datetime
+import re
 import unittest
 from unittest import mock
 
@@ -304,6 +305,47 @@ class DrinkManagerTestCase(unittest.TestCase):
     event = self._completed_event(ticks=7000, volume_ml=1000, duration=90)
     event.onset_ticks = None
     self.drink_manager.HandleFlowUpdateEvent(event)
+    self.assertEqual(1, len(self.backend.drinks))
+
+
+  def _ghost_with_pour(self):
+    # 1 tick per mL in 0.5 s bins: a 1.5 mL/s ghost for 2 minutes, with a
+    # 300 mL pour (30 mL/s for 10 s) starting 40 s in.
+    bins = [1] * 240
+    for k in range(80, 100):
+      bins[k] += 15
+    e = self._completed_event(ticks=sum(bins), volume_ml=sum(bins),
+        duration=120, onset_ticks=20)
+    e.tick_bins = bins
+    e.tick_bin_secs = 0.5
+    return e
+
+  def testLogsHiddenPourButDoesNotRecordIt(self):
+    with self.assertLogs(self.drink_manager._logger, level='WARNING') as logs:
+      self.drink_manager.HandleFlowUpdateEvent(self._ghost_with_pour())
+    self.assertEqual(0, len(self.backend.drinks))
+    hidden = [m for m in logs.output if 'Hidden pour' in m]
+    self.assertEqual(1, len(hidden), logs.output)
+    self.assertIn('log only, not recorded', hidden[0])
+    m = re.search(r'(\d+) mL from \+([\d.]+)s', hidden[0])
+    self.assertAlmostEqual(300, int(m.group(1)), delta=45)
+    self.assertAlmostEqual(40, float(m.group(2)), delta=1.5)
+
+  def testGhostWithoutHistoryStillDropped(self):
+    event = self._ghost_with_pour()
+    event.tick_bins = None
+    with self.assertLogs(self.drink_manager._logger, level='WARNING') as logs:
+      self.drink_manager.HandleFlowUpdateEvent(event)
+    self.assertEqual(0, len(self.backend.drinks))
+    self.assertFalse([m for m in logs.output if 'Hidden pour' in m])
+
+  def testRecordedDrinkSkipsHiddenPourSearch(self):
+    event = self._completed_event()
+    event.tick_bins = [100]
+    event.tick_bin_secs = 0.5
+    with mock.patch.object(manager.pour_detect, 'find_pours') as find_pours:
+      self.drink_manager.HandleFlowUpdateEvent(event)
+    find_pours.assert_not_called()
     self.assertEqual(1, len(self.backend.drinks))
 
 
