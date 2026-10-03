@@ -163,6 +163,18 @@ class FlowManagerTestCase(unittest.TestCase):
     idle_flows = list(self.flow_manager.IterIdleFlows(when=t(1000)))
     self.assertTrue(len(idle_flows) == 1)
 
+  def testImplicitFlowStartsAtUpdateTime(self):
+    def t(stamp):
+      return datetime.datetime.fromtimestamp(stamp)
+
+    flow, _ = self.flow_manager.UpdateFlow('flow0', 0, when=t(100))
+    self.flow_manager.UpdateFlow('flow0', 5, when=t(110))
+    self.flow_manager.UpdateFlow('flow0', 900, when=t(130))
+    event = flow.GetUpdateEvent()
+    self.assertEqual(t(100), event.start_time)
+    self.assertEqual(900, event.ticks)
+    self.assertEqual(5, event.onset_ticks)
+
 
 class DrinkManagerTestCase(unittest.TestCase):
   def setUp(self):
@@ -171,7 +183,7 @@ class DrinkManagerTestCase(unittest.TestCase):
     self.drink_manager = manager.DrinkManager(self.hub, self.backend)
 
   def _completed_event(self, ticks=100, volume_ml=50, username='alice',
-      duration=5):
+      duration=5, onset_ticks=None):
     e = kbevent.FlowUpdate()
     e.flow_id = 0x1234
     e.meter_name = 'flow0'
@@ -181,6 +193,7 @@ class DrinkManagerTestCase(unittest.TestCase):
     e.last_activity_time = datetime.datetime.fromtimestamp(duration)
     e.ticks = ticks
     e.volume_ml = volume_ml
+    e.onset_ticks = ticks if onset_ticks is None else onset_ticks
     return e
 
   def testRecordsCompletedFlow(self):
@@ -255,6 +268,43 @@ class DrinkManagerTestCase(unittest.TestCase):
     self.drink_manager._FlushPending()
     self.assertEqual(0, len(self.drink_manager._pending))
     self.assertEqual(0, len(self.backend.drinks))
+
+
+  def testSkipsAcceleratingGhostPour(self):
+    # A real ghost pour: 13 ticks in the first 20 s, then a ramp to several
+    # times a real pour's rate; 5545 mL over 172 s (32 mL/s average).
+    self.drink_manager.HandleFlowUpdateEvent(self._completed_event(
+        ticks=38813, volume_ml=5545, duration=172, onset_ticks=13))
+    self.assertEqual(0, len(self.backend.drinks))
+
+  def testRecordsLongRealPour(self):
+    # Filling a pitcher: full flow from the start, for two minutes.
+    self.drink_manager.HandleFlowUpdateEvent(self._completed_event(
+        ticks=21000, volume_ml=3000, duration=120, onset_ticks=3500))
+    self.assertEqual(1, len(self.backend.drinks))
+
+  def testRecordsShortFlowWithSlowOnset(self):
+    # A stray tick, then a real pour starting a few seconds later.
+    self.drink_manager.HandleFlowUpdateEvent(self._completed_event(
+        ticks=2100, volume_ml=300, duration=25, onset_ticks=1))
+    self.assertEqual(1, len(self.backend.drinks))
+
+  def testOnsetBoundary(self):
+    min_ml = common_defs.GHOST_POUR_MIN_ONSET_ML
+    duration = common_defs.GHOST_POUR_MIN_DURATION_SECS
+    # 1 tick per mL, so onset_ticks reads directly as mL.
+    self.drink_manager.HandleFlowUpdateEvent(self._completed_event(
+        ticks=1000, volume_ml=1000, duration=duration, onset_ticks=min_ml))
+    self.assertEqual(1, len(self.backend.drinks))
+    self.drink_manager.HandleFlowUpdateEvent(self._completed_event(
+        ticks=1000, volume_ml=1000, duration=duration, onset_ticks=min_ml - 1))
+    self.assertEqual(1, len(self.backend.drinks))
+
+  def testMissingOnsetSkipsOnsetCheck(self):
+    event = self._completed_event(ticks=7000, volume_ml=1000, duration=90)
+    event.onset_ticks = None
+    self.drink_manager.HandleFlowUpdateEvent(event)
+    self.assertEqual(1, len(self.backend.drinks))
 
 
 class ThermoManagerTestCase(unittest.TestCase):

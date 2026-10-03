@@ -26,3 +26,12 @@ class FlowTestCase(unittest.TestCase):
     self.assertEqual(datetime.datetime.fromtimestamp(0), e.start_time)
     self.assertEqual(datetime.datetime.fromtimestamp(20), e.last_activity_time)
     self.assertEqual(10, e.ticks)
+    self.assertEqual(10, e.onset_ticks)
+
+  def testOnsetTicksOnlyCountsStartOfFlow(self):
+    t = datetime.datetime.fromtimestamp
+    self.flow.AddTicks(5, when=t(1))
+    self.flow.AddTicks(8, when=t(20))
+    self.flow.AddTicks(1000, when=t(21))
+    self.assertEqual(1013, self.flow.GetTicks())
+    self.assertEqual(13, self.flow.GetUpdateEvent().onset_ticks)

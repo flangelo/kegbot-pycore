@@ -2,6 +2,7 @@
 
 from builtins import object
 import datetime
+from . import common_defs
 from . import kbevent
 
 class Flow(object):
@@ -18,7 +19,8 @@ class Flow(object):
     self._end_time = when
     self._last_log_time = None
     self._total_ticks = 0
-    self._volume_ml = None 
+    self._onset_ticks = 0
+    self._volume_ml = None
 
   def __str__(self):
     return '<Flow 0x%08x: meter_name=%s ticks=%s username=%s max_idle=%s>' % (self._flow_id,
@@ -38,6 +40,7 @@ class Flow(object):
     event.last_activity_time = self._end_time
     event.ticks = self.GetTicks()
     event.volume_ml = self.GetVolumeMl()
+    event.onset_ticks = self._onset_ticks
 
     return event
 
@@ -46,6 +49,9 @@ class Flow(object):
     if when is None:
       when = datetime.datetime.now()
     self._end_time = when
+    onset = datetime.timedelta(seconds=common_defs.GHOST_POUR_ONSET_SECS)
+    if when - self._start_time <= onset:
+      self._onset_ticks += amount
     if tap is not None:
         self._volume_ml = tap.TicksToMilliliters(self._total_ticks)
 

@@ -85,6 +85,7 @@ class FlowUpdate(Event):
   last_activity_time = EventField()
   ticks = EventField()
   volume_ml = EventField()
+  onset_ticks = EventField()
 
 class DrinkCreatedEvent(Event):
   flow_id = EventField()

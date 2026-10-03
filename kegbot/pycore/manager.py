@@ -154,13 +154,14 @@ class FlowManager(Manager):
   def GetFlow(self, tap_name):
     return self._flow_map.get(tap_name)
 
-  def StartFlow(self, meter_name, username='', max_idle_secs=10):
+  def StartFlow(self, meter_name, username='', max_idle_secs=10, when=None):
     """Starts a new flow on the given meter, or takes over the existing flow.
 
     Args
       meter_name: name of the meter producing the flow
       username: username to own the flow, or None/empty string for anonymous
       max_idle_secs: maximum number of seconds until the flow is marked idle
+      when: start time for a new flow (defaults to datetime.now)
 
     Returns
       Tuple of (Flow, boolean is_new).
@@ -184,7 +185,7 @@ class FlowManager(Manager):
 
     # Start a new flow.
     new_flow = Flow(meter_name, flow_id=self._GetNextFlowId(), username=username,
-        max_idle_secs=max_idle_secs)
+        max_idle_secs=max_idle_secs, when=when)
     self._flow_map[meter_name] = new_flow
     self._logger.info('Starting flow: %s' % new_flow)
     self._PublishUpdate(new_flow)
@@ -229,13 +230,14 @@ class FlowManager(Manager):
     self._logger.debug('Flow update: tap=%s meter_reading=%i (delta=%i)' %
         (meter_name, meter_reading, delta))
 
+    if when is None:
+      when = datetime.datetime.now()
+
     is_new = False
     flow = self.GetFlow(meter_name)
     if flow is None:
       self._logger.debug('Starting flow implicitly due to activity.')
-      flow, is_new = self.StartFlow(meter_name)
-    if when is None:
-      when = datetime.datetime.now()
+      flow, is_new = self.StartFlow(meter_name, when=when)
 
     flow.AddTicks(delta, when, tap)
     self._PublishUpdate(flow)
@@ -379,6 +381,16 @@ class DrinkManager(Manager):
             meter_name, volume_ml, duration, volume_ml / duration,
             common_defs.GHOST_POUR_MAX_RATE_ML_PER_SEC))
         return
+    if (volume_ml is not None
+        and event.onset_ticks is not None
+        and duration >= common_defs.GHOST_POUR_MIN_DURATION_SECS):
+        onset_ml = volume_ml * event.onset_ticks / ticks
+        if onset_ml < common_defs.GHOST_POUR_MIN_ONSET_ML:
+            self._logger.warning('Not recording flow: likely ghost pour on %s '
+                '(%i mL over %is, but only %i mL in the first %is, below %i mL)' % (
+                meter_name, volume_ml, duration, onset_ml,
+                common_defs.GHOST_POUR_ONSET_SECS, common_defs.GHOST_POUR_MIN_ONSET_ML))
+            return
 
     # Log the drink.  If the username is empty or invalid, the backend will
     # assign it to the default (anonymous) user.  The backend will assign the
