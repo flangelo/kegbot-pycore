@@ -299,8 +299,23 @@ class DrinkManagerTestCase(unittest.TestCase):
         ticks=8570, volume_ml=1224, duration=19))
     self.assertEqual(0, len(self.backend.drinks))
 
+  def testMaxVolumeIsConfigurable(self):
+    ghost = lambda: self._completed_event(ticks=7000, volume_ml=1500,
+        duration=30)
+    old = manager.FLAGS.ghost_pour_max_volume_ml
+    try:
+      manager.FLAGS.ghost_pour_max_volume_ml = 2000
+      self.drink_manager.HandleFlowUpdateEvent(ghost())
+      self.assertEqual(1, len(self.backend.drinks))
+      manager.FLAGS.ghost_pour_max_volume_ml = 0  # disabled
+      self.drink_manager.HandleFlowUpdateEvent(ghost())
+      self.assertEqual(2, len(self.backend.drinks))
+    finally:
+      manager.FLAGS.ghost_pour_max_volume_ml = old
+
   def testMaxVolumeBoundary(self):
-    max_ml = common_defs.GHOST_POUR_MAX_VOLUME_ML
+    max_ml = manager.FLAGS.ghost_pour_max_volume_ml
+    self.assertEqual(common_defs.GHOST_POUR_MAX_VOLUME_ML, max_ml)
     self.drink_manager.HandleFlowUpdateEvent(self._completed_event(
         ticks=max_ml, volume_ml=max_ml, duration=30))
     self.assertEqual(1, len(self.backend.drinks))

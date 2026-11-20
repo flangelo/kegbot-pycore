@@ -22,7 +22,8 @@ GHOST_POUR_MIN_ONSET_ML = 40
 # a steady, real-pour-like ~33 mL/s for minutes: 1.2-14 L per "drink". Real
 # pours here are single glasses (11-13 oz, at most ~500 mL), so any flow above
 # this volume is dropped regardless of duration. This also drops a pitcher or
-# growler filled in one go.
+# growler filled in one go. Default for the --ghost_pour_max_volume_ml flag
+# (env KEGBOT_GHOST_POUR_MAX_VOLUME_ML); 0 disables the check.
 GHOST_POUR_MAX_VOLUME_ML = 1000
 
 # A real pour made while a ghost flow is running would be dropped with it.

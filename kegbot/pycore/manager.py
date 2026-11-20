@@ -11,6 +11,7 @@ import requests
 import time
 import threading
 import logging
+import os
 
 from . import backend
 from . import common_defs
@@ -32,6 +33,14 @@ gflags.DEFINE_integer('retry_interval', 10,
 
 gflags.DEFINE_integer('maximum_event_retries', 3,
     'Maximum number of times to retry posting updates to the backend.',
+    lower_bound=0)
+
+gflags.DEFINE_integer('ghost_pour_max_volume_ml',
+    int(os.environ.get('KEGBOT_GHOST_POUR_MAX_VOLUME_ML',
+        common_defs.GHOST_POUR_MAX_VOLUME_ML)),
+    'Drop any flow above this many mL as a likely ghost pour, regardless of '
+    'duration. 0 disables the check. Defaults to the '
+    'KEGBOT_GHOST_POUR_MAX_VOLUME_ML environment variable.',
     lower_bound=0)
 
 def EventHandler(event_type):
@@ -354,9 +363,9 @@ class DrinkManager(Manager):
 
   def _GhostPourReason(self, event, ticks, volume_ml, duration):
     """Returns why a completed flow looks like a ghost pour, or None."""
-    if volume_ml is not None and volume_ml > common_defs.GHOST_POUR_MAX_VOLUME_ML:
-      return '%i mL over %is, above %i mL' % (
-          volume_ml, duration, common_defs.GHOST_POUR_MAX_VOLUME_ML)
+    max_ml = FLAGS.ghost_pour_max_volume_ml
+    if max_ml and volume_ml is not None and volume_ml > max_ml:
+      return '%i mL over %is, above %i mL' % (volume_ml, duration, max_ml)
     if volume_ml is None or duration < common_defs.GHOST_POUR_MIN_DURATION_SECS:
       return None
     if volume_ml / duration < common_defs.GHOST_POUR_MAX_RATE_ML_PER_SEC:
