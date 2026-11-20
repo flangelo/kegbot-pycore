@@ -228,9 +228,10 @@ class DrinkManagerTestCase(unittest.TestCase):
     self.assertEqual(0, len(self.backend.drinks))
 
   def testSkipsGhostPour(self):
-    # A real ghost pour: 3076 mL trickled in over 36 minutes (1.4 mL/s).
+    # Shaped like a real ghost pour (1.4 mL/s for over 10 minutes), kept under
+    # GHOST_POUR_MAX_VOLUME_ML so the rate check is what drops it.
     self.drink_manager.HandleFlowUpdateEvent(
-        self._completed_event(ticks=21534, volume_ml=3076, duration=2162))
+        self._completed_event(ticks=6300, volume_ml=900, duration=643))
     self.assertEqual(0, len(self.backend.drinks))
 
   def testRecordsSlowRealPour(self):
@@ -272,16 +273,39 @@ class DrinkManagerTestCase(unittest.TestCase):
 
 
   def testSkipsAcceleratingGhostPour(self):
-    # A real ghost pour: 13 ticks in the first 20 s, then a ramp to several
-    # times a real pour's rate; 5545 mL over 172 s (32 mL/s average).
+    # Shaped like a real ghost pour: 13 ticks in the first 20 s, then a ramp;
+    # kept under GHOST_POUR_MAX_VOLUME_ML so the onset check is what drops it.
     self.drink_manager.HandleFlowUpdateEvent(self._completed_event(
-        ticks=38813, volume_ml=5545, duration=172, onset_ticks=13))
+        ticks=6300, volume_ml=900, duration=60, onset_ticks=13))
     self.assertEqual(0, len(self.backend.drinks))
 
   def testRecordsLongRealPour(self):
-    # Filling a pitcher: full flow from the start, for two minutes.
+    # A slow, careful pour: full flow from the start, for over a minute.
     self.drink_manager.HandleFlowUpdateEvent(self._completed_event(
-        ticks=21000, volume_ml=3000, duration=120, onset_ticks=3500))
+        ticks=6300, volume_ml=900, duration=75, onset_ticks=1700))
+    self.assertEqual(1, len(self.backend.drinks))
+
+  def testSkipsSteadyHighVolumeGhostPour(self):
+    # A real ghost pour (drink 534): ramped to 239 mL in the first 20 s, then
+    # held ~33 mL/s; 7992 mL over 135 s. Passes the rate and onset checks.
+    self.drink_manager.HandleFlowUpdateEvent(self._completed_event(
+        ticks=55943, volume_ml=7992, duration=135, onset_ticks=1674))
+    self.assertEqual(0, len(self.backend.drinks))
+
+  def testSkipsShortHighVolumeGhostPour(self):
+    # A real ghost pour (drink 532): 1224 mL in 19 s, too short for the
+    # duration-gated checks.
+    self.drink_manager.HandleFlowUpdateEvent(self._completed_event(
+        ticks=8570, volume_ml=1224, duration=19))
+    self.assertEqual(0, len(self.backend.drinks))
+
+  def testMaxVolumeBoundary(self):
+    max_ml = common_defs.GHOST_POUR_MAX_VOLUME_ML
+    self.drink_manager.HandleFlowUpdateEvent(self._completed_event(
+        ticks=max_ml, volume_ml=max_ml, duration=30))
+    self.assertEqual(1, len(self.backend.drinks))
+    self.drink_manager.HandleFlowUpdateEvent(self._completed_event(
+        ticks=max_ml + 1, volume_ml=max_ml + 1, duration=30))
     self.assertEqual(1, len(self.backend.drinks))
 
   def testRecordsShortFlowWithSlowOnset(self):

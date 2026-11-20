@@ -18,6 +18,13 @@ GHOST_POUR_MAX_RATE_ML_PER_SEC = 2.0
 GHOST_POUR_ONSET_SECS = 20
 GHOST_POUR_MIN_ONSET_ML = 40
 
+# A third ghost shape ramps up over ~15 s (passing the onset check), then holds
+# a steady, real-pour-like ~33 mL/s for minutes: 1.2-14 L per "drink". Real
+# pours here are single glasses (11-13 oz, at most ~500 mL), so any flow above
+# this volume is dropped regardless of duration. This also drops a pitcher or
+# growler filled in one go.
+GHOST_POUR_MAX_VOLUME_ML = 1000
+
 # A real pour made while a ghost flow is running would be dropped with it.
 # Flows keep a tick history in bins of this width (up to the cap), and
 # pour_detect looks in dropped flows for abrupt steps at least this far above

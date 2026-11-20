@@ -354,6 +354,9 @@ class DrinkManager(Manager):
 
   def _GhostPourReason(self, event, ticks, volume_ml, duration):
     """Returns why a completed flow looks like a ghost pour, or None."""
+    if volume_ml is not None and volume_ml > common_defs.GHOST_POUR_MAX_VOLUME_ML:
+      return '%i mL over %is, above %i mL' % (
+          volume_ml, duration, common_defs.GHOST_POUR_MAX_VOLUME_ML)
     if volume_ml is None or duration < common_defs.GHOST_POUR_MIN_DURATION_SECS:
       return None
     if volume_ml / duration < common_defs.GHOST_POUR_MAX_RATE_ML_PER_SEC:
